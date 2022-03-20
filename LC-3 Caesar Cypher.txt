@@ -1,0 +1,302 @@
+;Yay final project :)
+.ORIG x3000
+
+START_M
+
+		AND     R0, R0, #0	; clear all registers just in case
+		AND 	R1, R1, #0     	
+		AND 	R2, R2, #0
+		AND 	R3, R3, #0
+		AND 	R4, R4, #0	
+		AND 	R5, R5, #0
+		AND 	R6, R6, #0
+		AND 	R7, R7, #0
+
+		LEA	R0, PROMPT_M
+		PUTS
+		GETC
+		OUT
+	
+		LD	R7, ASCII_M	 
+		ADD	R0, R0, R7	; convert the received character to an int
+		ST      R0, encrypt_q
+
+		BRz	START_A
+		
+
+		ADD	R0, R0, #-1	
+		BRz	START_A
+
+		BRnzp	START_M
+
+
+
+;; VARIABLES
+
+PROMPT_M	.STRINGZ "\nWould you like to encrypt a phrase, or do you have a string you would like to decrypt? \nEnter 1 for encryption, 0 for decryption: "
+ASCII_M		.FILL #-48
+encrypt_q       .FILL x0000
+
+START_A
+		LD R4, l_upper    ;lowercase letters bounds
+		LD R5, l_lower
+		LD R6, u_upper    ;uppercase letters bounds
+		LD R3, u_lower
+		LEA R0, PROMT_USER
+		PUTS
+
+PROMT_LOOP   	GETC
+
+		ADD R2, R0, #-10  ;check if the enter key was pressed
+	    	BRz START_H       ;and if so, go to next task
+	   
+	      	NOT R1, R0
+	      	ADD R1, R1, #1
+	   
+	      	ADD R2, R4, R1
+	      	BRn PROMT_LOOP
+	   
+	      	ADD R2, R5, R1
+	      	BRp CHECK_CAPITAL
+	      
+VALID	      	STI R0, pointer
+	      	LD R7, pointer
+	      	ADD R7, R7, #1
+	      	ST R7, pointer
+	      	TRAP x21
+	      	BRnzp PROMT_LOOP
+           
+CHECK_CAPITAL 	ADD R2, R6, R1
+	      	BRn PROMT_LOOP
+		
+	      	ADD R2, R3, R1
+	      	BRp PROMT_LOOP
+		
+	      	BRnzp VALID
+
+
+A            	.FILL xFE00
+B            	.FILL xFE02
+l_upper      	.FILL #122
+l_lower      	.FILL #97
+u_upper      	.FILL #90
+u_lower      	.FILL #65
+spacebar     	.FILL #-32
+PROMT_USER   	.STRINGZ "\nPlease enter the string: "
+pointer      	.FILL x4000      ;pointer to where in memory the letter should go
+
+;The offset is currently set as 1-5
+START_H
+	LD	R5, LOWBOUND	;Load 1 for lowerbound
+	LD	R6, UPBOUND	;Load 5 for upper bound
+	
+BEGIN	AND     R0, R0, #0	; Clear some registers just in case
+	AND 	R1, R1, #0     	 
+	AND 	R2, R2, #0
+	AND 	R3, R3, #0
+	AND	R4, R4, #0
+
+	LEA	R0, PROMPT_H
+	PUTS			;Prompt for input
+	GETC			;Get input
+	ADD	R3, R4, R0	;Put input in R3, it is in ascii form right now
+	OUT			;Echo the input out
+	
+;Check to see if it is below the bound and go to ex if invalid
+	ADD 	R2, R5, R3
+	BRn	EX
+
+;Check to see if it is above the bound and go to ex if invalid
+	ADD	R1, R6, R3
+	BRp	EX
+	
+	LD	R4, ASCII_H
+	ADD	R3, R3, R4	;Put input in decimal form
+	
+	STI	R3, STOREMEM	;Store in memory at location x3FFE -can make it different if needed
+	BRnzp   DECIDE
+
+EX	LEA	R0, INVALID
+	PUTS		;Print invalid input
+	BR	BEGIN	;Branches back to the beginning for invalid input
+
+PROMPT_H 	.STRINGZ "\nInput offset (1-5): "
+INVALID  	.STRINGZ "\nInvalid input, please try again\n"
+LOWBOUND 	.FILL #-49	;Negative values of two bounds, used to determine if character is valid
+UPBOUND  	.FILL #-53
+STOREMEM	.FILL x3FFE 	;Store the offset value into x3FFE - value is in decimal form
+ASCII_H    	.FILL #-48
+
+
+	
+
+DECIDE
+	LD	R0, NEWLINE
+	OUT
+	
+	LD	R1, encrypt_q
+	BRz	DECRYPT
+
+	AND     R0, R0, #0	; clear all registers just in case
+	AND 	R1, R1, #0
+	AND 	R2, R2, #0
+	AND 	R3, R3, #0
+	AND 	R4, R4, #0
+	AND 	R5, R5, #0
+	AND 	R6, R6, #0
+	AND 	R7, R7, #0
+
+	LD R1, pointerm
+	ST R1, pointerm
+	LDI R0, pointerm
+	LDI R2, STOREMEM
+
+
+ENCRYPT_LOOP
+
+; Load the character referenced by the pointer into R0
+; If the loaded char is null, break out of the loop
+
+	LDI R0, pointerm
+	BRz END
+	
+	ADD R0, R0, R2		; Add the offset to the character
+	
+	LD R3, LOWER_Z_NEG
+	LD R4, LOWER_Z_POS
+
+	ADD R0, R0, R3
+	BRp E_WRAP_LC
+	ADD R0, R0, R4
+
+	LD R3, UPPER_Z_NEG
+	LD R4, UPPER_Z_POS
+
+	ADD R0, R0, R3
+	BRp E_WRAP_UC
+	ADD R0, R0, R4
+
+E_CONTINUE
+	OUT
+
+; This increments the pointer to the next character
+
+	LD R6, pointerm
+	ADD R6, R6, #1
+	ST R6, pointerm
+
+	BRnzp ENCRYPT_LOOP
+
+E_WRAP_LC
+	LD R4, LOWER_Z_POS
+	ADD R0, R0, R4
+	LD R5, MINUS_26
+	ADD R0, R0, R5
+	AND R5, R5, #0
+	BRnzp E_CONTINUE
+
+E_WRAP_UC
+	ADD R0, R0, R4
+	LD R5, LOWER_A_NEG
+	ADD R5, R5, R0
+	BRzp E_CONTINUE
+
+	LD R4, UPPER_Z_POS
+	LD R5, MINUS_26
+	ADD R0, R0, R5
+	AND R5, R5, #0
+	BRnzp E_CONTINUE
+	
+DECRYPT
+	AND     R0, R0, #0	; clear all registers just in case
+	AND 	R1, R1, #0
+	AND 	R2, R2, #0
+	AND 	R3, R3, #0
+	AND 	R4, R4, #0
+	AND 	R5, R5, #0
+	AND 	R6, R6, #0
+	AND 	R7, R7, #0
+
+	LD R1, pointerm
+	ST R1, pointerm
+	LDI R0, pointerm
+	LDI R2, STOREMEM
+	NOT R2, R2
+	ADD R2, R2, #1
+
+DECRYPT_LOOP
+
+; Load the character referenced by the pointer into R0
+; If the loaded char is null, break out of the loop
+
+	LDI R0, pointerm
+	BRz END
+	
+	ADD R0, R0, R2		; Add the offset to the character
+	
+	LD R3, UPPER_A_NEG
+	LD R4, UPPER_A_POS
+
+	ADD R0, R0, R3
+	BRn D_WRAP_UC
+	ADD R0, R0, R4
+
+	LD R3, LOWER_A_NEG
+	LD R4, LOWER_A_POS
+
+	ADD R0, R0, R3
+	BRn D_WRAP_LC
+	ADD R0, R0, R4
+
+D_CONTINUE
+	OUT
+
+; This increments the pointer to the next character
+
+	LD R6, pointerm
+	ADD R6, R6, #1
+	ST R6, pointerm
+
+	BRnzp DECRYPT_LOOP
+
+D_WRAP_LC
+	ADD R0, R0, R4
+	LD R5, UPPER_Z_NEG
+	ADD R5, R5, R0
+	BRnz D_CONTINUE
+
+	LD R4, LOWER_A_POS
+	LD R5, PLUS_26
+	ADD R0, R0, R5
+	AND R5, R5, #0
+	BRnzp D_CONTINUE
+	
+
+D_WRAP_UC
+	ADD R0, R0, R4
+	LD R5, PLUS_26
+	ADD R0, R0, R5
+	AND R5, R5, #0
+	BRnzp D_CONTINUE
+
+
+END
+	HALT
+	
+; VARs
+NEWLINE		.STRINGZ "\n"
+LOWER_A_NEG	.FILL #-97
+LOWER_A_POS	.FILL #97
+LOWER_Z_NEG	.FILL #-122
+LOWER_Z_POS	.FILL #122
+UPPER_A_NEG	.FILL #-65
+UPPER_A_POS	.FILL #65
+UPPER_Z_NEG	.FILL #-90
+UPPER_Z_POS	.FILL #90
+MINUS_26	.FILL #-26
+PLUS_26		.FILL #26
+pointerm	.FILL x4000
+
+	.END
+
+
